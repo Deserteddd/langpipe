@@ -1,42 +1,66 @@
 #[cfg(test)]
+//---------------------------------
+//---------------------------------
+// LEXER TESTS
+//---------------------------------
+//---------------------------------
 mod tests {
   use langpipe::Lexer;
-
-use crate::generate_random_strings;
-
+// -----------------------------------------------------------------------------------
   #[test]
   fn random_strings() {
+    let test_strings = [
+      generate_random_strings(500, 250),
+      get_sample_strings()
+    ].concat();
 
-    let test_strings = generate_random_strings(500, 250);
-
-    for i in test_strings {
-      // Correct output
-      let wp_removed: String = i.chars()
-        .filter(|c| !c.is_ascii_whitespace())
-        .collect();
-
-      // Actual output
-      let lexed: String = Lexer::from(i.as_str())
-        .into_iter()
-        .map(|token| token.literal())
-        .collect();
-
-      if wp_removed != lexed {
-        panic!("Lex error:\nLexed --->{}<--\nActual -->{}<--", wp_removed, lexed);
-      } else {
-        println!("Ok: {lexed}")
-      }
-    }
+    test_strings.iter().for_each(|string| {
+      assert_eq!(
+        // Correct output
+        string.chars()
+          .filter(|c| !c.is_ascii_whitespace())
+          .collect::<String>()
+        ,
+        // Actual output
+        Lexer::from(string.as_str())
+          .into_iter()
+          .map(|token| token.literal())
+          .collect::<String>()
+      )
+    })
   }
-
+// -----------------------------------------------------------------------------------
   #[test]
   fn positions() { 
-    todo!("Test if position of each token matches actual position in source")
-  }
-}
+    let test_strings = [
+      generate_random_strings(500, 250),
+      get_sample_strings()
+    ].concat();
 
-use rand::{distributions::Uniform, Rng};
-fn generate_random_strings(n: u32 , l: usize) -> Vec<String> {
+    test_strings.iter().enumerate().for_each(|(nth, string)| 
+      Lexer::from(string.as_str()).for_each(|token| {
+        let (start, end) = token.position();
+        assert_eq!(
+          token.literal().chars().nth(0).unwrap(),
+          test_strings[nth].chars().nth(start).unwrap()
+        );
+        assert_eq!(
+          token.literal().chars().last().unwrap(),
+          test_strings[nth].chars().nth(end).unwrap()
+        );
+        assert_eq!(
+          token.literal(),
+          test_strings[nth].get(start..=end).unwrap()
+        )
+      })
+    )
+  }
+
+//---------------------------------
+// Test helpers
+//---------------------------------
+  use rand::{distributions::Uniform, Rng};
+  fn generate_random_strings(n: u32 , l: usize) -> Vec<String> {
     let mut test_strings: Vec<String> = vec![];
     // Generate random strings
     (0..n).for_each(|_| test_strings.push(
@@ -48,4 +72,14 @@ fn generate_random_strings(n: u32 , l: usize) -> Vec<String> {
         .collect()
     ));
     test_strings
+  }
+
+  fn get_sample_strings() -> Vec<String> {
+    std::fs::read_to_string("tests/samples.txt")
+      .unwrap()
+      .lines()
+      .map(|content| String::from(content))
+      .collect::<Vec<String>>()
+  }
 }
+

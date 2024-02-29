@@ -3,19 +3,18 @@
 /// Lexer
 //------------------------------------------------------
 //------------------------------------------------------
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Lexer<'a> {
   source: &'a str,
   cursor: usize,
   current_kind: TokenKind,
 }
-
 impl<'a> Lexer<'a> {
   pub fn new(input: &'a str) -> Result<Lexer, String> {
     Ok(Lexer { 
       source: input, 
       cursor: 0, 
-      current_kind: get_first_kind(&input)
+      current_kind: get_kind(input.chars().nth(0).unwrap_or(' '))
     })
   }
 
@@ -27,10 +26,6 @@ impl<'a> Lexer<'a> {
 //------------------------------------------------------
 // Helper functions
 //------------------------------------------------------
-fn get_first_kind(s: &str) -> TokenKind {
-  get_kind(s.chars().nth(0).unwrap_or(' '))
-}
-
 fn _subtract_or_zero(n: usize, p: usize) -> usize {
   match p > n {
     true => 0,
@@ -52,7 +47,6 @@ impl<'a> Iterator for Lexer<'a> {
       return self.next();
     }
     self.current_kind = get_kind(self.char_at_cursor().unwrap());
-
     for (index, i) in self.source.chars().skip(self.cursor).enumerate() {
       if get_kind(i) != self.current_kind {
         let old_cursor = self.cursor;
@@ -62,7 +56,6 @@ impl<'a> Iterator for Lexer<'a> {
         }
       }
     }
-
     if let Some(s) = self.source.get(self.cursor..) {
       let cursor = self.cursor;
       self.cursor += s.len();
@@ -91,7 +84,7 @@ pub struct Token<'a> {
 }
 
 impl<'a> Token<'a> {
-  fn new(kind: TokenKind, literal: &'a str, pos: (usize, usize)) -> Self {
+  pub fn new(kind: TokenKind, literal: &'a str, pos: (usize, usize)) -> Self {
     Token {
       kind,
       literal,
