@@ -1,10 +1,11 @@
 use langpipe::Lexer;
 
 fn main() {
-  let lex = Lexer::from("Work in progress!");
+  let sampletext = std::fs::read_to_string("tests/samples.txt").unwrap();
+  let lex = Lexer::from(sampletext.as_str());
   for i in lex {
     println!(
-      "{:?} at [{}..{}]: '{}'",
+      "{:?} at [{}..{}]: '{}'\n",
       i.kind(),
       i.position().0,
       i.position().1,

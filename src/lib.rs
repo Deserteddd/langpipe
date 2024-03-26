@@ -7,6 +7,7 @@
 pub struct Lexer<'a> {
   source: &'a str,
   cursor: usize,
+  offset: usize,
   current_kind: TokenKind,
 }
 impl<'a> Lexer<'a> {
@@ -14,6 +15,7 @@ impl<'a> Lexer<'a> {
     Ok(Lexer { 
       source: input, 
       cursor: 0, 
+      offset: 0,
       current_kind: get_kind(input.chars().nth(0).unwrap_or(' '))
     })
   }
@@ -39,7 +41,7 @@ fn _subtract_or_zero(n: usize, p: usize) -> usize {
 impl<'a> Iterator for Lexer<'a> {
   type Item = Token<'a>;
   fn next(&mut self) -> Option<Self::Item> {
-    if self.cursor == self.source.len() {
+    if self.cursor+self.offset >= self.source.len() {
       return None;
     }
     if self.char_at_cursor() == Some(' ') {
@@ -47,19 +49,29 @@ impl<'a> Iterator for Lexer<'a> {
       return self.next();
     }
     self.current_kind = get_kind(self.char_at_cursor().unwrap());
-    for (index, i) in self.source.chars().skip(self.cursor).enumerate() {
+    for (index, (char_index, i)) in self.source.char_indices().skip(self.cursor).enumerate() {
+      let mut added_offset = 0;
+      if index + self.offset < char_index - self.cursor {
+        added_offset = 1;
+        self.offset += 1;
+      }
       if get_kind(i) != self.current_kind {
         let old_cursor = self.cursor;
-        self.cursor += index;
-        if let Some(s) = self.source.get(old_cursor..self.cursor) {
-          return Some(Token::new(self.current_kind, s, (old_cursor, self.cursor-1)));
+        self.cursor += index; //+ (char_index - prev_chr_idx) - 1;
+        if let Some(literal) = self.source.get(old_cursor+self.offset-added_offset..self.cursor+self.offset) {
+
+          return Some(Token::new(
+            self.current_kind, 
+            literal, 
+            (old_cursor+self.offset-added_offset, self.cursor+self.offset-1)
+          ));
         }
       }
     }
-    if let Some(s) = self.source.get(self.cursor..) {
+    if let Some(s) = self.source.get(self.cursor+self.offset..) {
       let cursor = self.cursor;
       self.cursor += s.len();
-      return Some(Token::new(self.current_kind, s, (cursor, self.cursor-1)));
+      return Some(Token::new(self.current_kind, s, (cursor+self.offset, self.cursor+self.offset-1)));
     }
     None
   }
@@ -103,6 +115,10 @@ impl<'a> Token<'a> {
   pub fn position(&self) -> (usize, usize) {
     self.pos
   }
+
+  pub fn get_literal_from_source(&self, source: &'a str) -> &'a str {
+    source.get(self.pos.0..=self.pos.1).unwrap()
+  }
 }
 
 //------------------------------------------------------
@@ -129,5 +145,6 @@ pub enum TokenKind {
   Operator,
   Digit,
   Word,
+  Newline,
   Other,
 }
