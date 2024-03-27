@@ -1,3 +1,5 @@
+use std::fmt::{Display, Debug};
+
 //------------------------------------------------------
 //------------------------------------------------------
 /// Lexer
@@ -6,32 +8,20 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Lexer<'a> {
   source: &'a str,
-  cursor: usize,
-  offset: usize,
-  current_kind: TokenKind,
+  byte_cursor: usize,
+  char_cursor: usize,
 }
 impl<'a> Lexer<'a> {
   pub fn new(input: &'a str) -> Result<Lexer, String> {
     Ok(Lexer { 
       source: input, 
-      cursor: 0, 
-      offset: 0,
-      current_kind: get_kind(input.chars().nth(0).unwrap_or(' '))
+      byte_cursor: 0,
+      char_cursor: 0,
     })
   }
 
   fn char_at_cursor(&self) -> Option<char> {
-    self.source.chars().nth(self.cursor)
-  }
-}
-
-//------------------------------------------------------
-// Helper functions
-//------------------------------------------------------
-fn _subtract_or_zero(n: usize, p: usize) -> usize {
-  match p > n {
-    true => 0,
-    false => n-p
+    self.source.chars().nth(self.char_cursor)
   }
 }
 
@@ -41,37 +31,29 @@ fn _subtract_or_zero(n: usize, p: usize) -> usize {
 impl<'a> Iterator for Lexer<'a> {
   type Item = Token<'a>;
   fn next(&mut self) -> Option<Self::Item> {
-    if self.cursor+self.offset >= self.source.len() {
+    if self.byte_cursor >= self.source.len() {
       return None;
     }
-    if self.char_at_cursor() == Some(' ') {
-      self.cursor += 1;
-      return self.next();
-    }
-    self.current_kind = get_kind(self.char_at_cursor().unwrap());
-    for (index, (char_index, i)) in self.source.char_indices().skip(self.cursor).enumerate() {
-      let mut added_offset = 0;
-      if index + self.offset < char_index - self.cursor {
-        added_offset = 1;
-        self.offset += 1;
-      }
-      if get_kind(i) != self.current_kind {
-        let old_cursor = self.cursor;
-        self.cursor += index; //+ (char_index - prev_chr_idx) - 1;
-        if let Some(literal) = self.source.get(old_cursor+self.offset-added_offset..self.cursor+self.offset) {
 
-          return Some(Token::new(
-            self.current_kind, 
-            literal, 
-            (old_cursor+self.offset-added_offset, self.cursor+self.offset-1)
-          ));
-        }
-      }
-    }
-    if let Some(s) = self.source.get(self.cursor+self.offset..) {
-      let cursor = self.cursor;
-      self.cursor += s.len();
-      return Some(Token::new(self.current_kind, s, (cursor+self.offset, self.cursor+self.offset-1)));
+    let token_kind = match self.char_at_cursor() {
+      Some(c) => get_kind(c),
+      None => return None,
+    };
+
+    let literal = self.source
+      .chars()
+      .skip(self.char_cursor)
+      .take_while(|c| get_kind(*c) == token_kind)
+      .collect::<String>();
+
+    let raw_count = literal.len();
+    let char_count = literal.chars().count();
+
+    self.byte_cursor += raw_count;
+    self.char_cursor += char_count;
+      
+    if let Some(str) = self.source.get(self.byte_cursor-raw_count..self.byte_cursor){
+      return Some(Token::new(token_kind, str, (self.char_cursor-char_count, self.char_cursor-1)));
     }
     None
   }
@@ -88,7 +70,7 @@ impl<'a> From<&'a str> for Lexer<'a> {
 // Token
 //------------------------------------------------------
 //------------------------------------------------------
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Token<'a> {
   kind: TokenKind,
   literal: &'a str,
@@ -115,26 +97,47 @@ impl<'a> Token<'a> {
   pub fn position(&self) -> (usize, usize) {
     self.pos
   }
+}
+//------------------------------------------------------
+// Trait impls
+//------------------------------------------------------
+impl<'a> Display for Token<'a>{
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(f, "{}", self.literal)
+      
+  }
+}
 
-  pub fn get_literal_from_source(&self, source: &'a str) -> &'a str {
-    source.get(self.pos.0..=self.pos.1).unwrap()
+impl<'a> Debug for Token<'a>{
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+      write!(
+        f, 
+        "{:?} at [{}..{}]: '{}'\n",
+        self.kind(),
+        self.position().0,
+        self.position().1,
+        self.literal(),
+      )
+      
   }
 }
 
 //------------------------------------------------------
 // Helper functions
 //------------------------------------------------------
-fn get_kind(c: char) -> TokenKind {
-  match (
-    c.is_ascii_digit(),
-    c.is_ascii_punctuation(),
-    c.is_alphabetic(),
-  ) {
-    (true, false, false) => TokenKind::Digit,
-    (false, true, false) => TokenKind::Operator,
-    (false, false, true) => TokenKind::Word,
-    _ => TokenKind::Other,
+pub fn get_kind(c: char) -> TokenKind {
+  match c.len_utf8() {
+    1 | 2 => {
+      if c.is_whitespace() { TokenKind::Whitespace }
+      else if c.is_alphabetic() { TokenKind::Word }
+      else if c.is_ascii_digit() { TokenKind::Number }
+      else { TokenKind::Other }
+    },
+
+    4 => TokenKind::Emoji,
+    _ => TokenKind::Other
   }
+  // println!("{:} => {:?}", c, a);
 }
 
 //------------------------------------------------------
@@ -142,9 +145,10 @@ fn get_kind(c: char) -> TokenKind {
 //------------------------------------------------------
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TokenKind {
-  Operator,
-  Digit,
+  Punctuation,
+  Number,
   Word,
-  Newline,
+  Whitespace,
+  Emoji,
   Other,
 }
